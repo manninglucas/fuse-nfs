@@ -487,29 +487,6 @@ static int fuse_nfs_create(const char *path, mode_t mode, struct fuse_file_info 
 	return cb_data.status;
 }
 
-static int fuse_nfs_utime(const char *path, struct utimbuf *times)
-{
-	struct sync_cb_data cb_data;
-	int ret;
-
-	LOG("fuse_nfs_utime entered [%s]\n", path);
-
-        memset(&cb_data, 0, sizeof(struct sync_cb_data));
-
-	pthread_mutex_lock(&nfs_mutex);
-	update_rpc_credentials();
-	ret = nfs_utime_async(nfs, path, times, generic_cb, &cb_data);
-	pthread_mutex_unlock(&nfs_mutex);
-	if (ret < 0) {
-                LOG("fuse_nfs_utime returned %d. %s\n", ret,
-                    nfs_get_error(nfs));
-		return ret;
-	}
-	wait_for_nfs_reply(nfs, &cb_data);
-
-	return cb_data.status;
-}
-
 static int fuse_nfs_unlink(const char *path)
 {
 	struct sync_cb_data cb_data;
