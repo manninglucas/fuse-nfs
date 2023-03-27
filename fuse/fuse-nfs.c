@@ -17,7 +17,6 @@
 */
 /* A FUSE filesystem based on libnfs. */
 
-#define FUSE_USE_VERSION 26
 #define _FILE_OFFSET_BITS 64
 
 #include "../config.h"
@@ -209,7 +208,7 @@ stat64_cb(int status, struct nfs_context *nfs, void *data, void *private_data)
 }
 
 static int
-fuse_nfs_getattr(const char *path, struct FUSE_STAT *stbuf)
+fuse_nfs_getattr(const char *path, struct FUSE_STAT *stbuf, struct fuse_file_info* file_info)
 {
 	struct nfs_stat_64 st;
 	struct sync_cb_data cb_data;
@@ -276,7 +275,7 @@ readdir_cb(int status, struct nfs_context *nfs, void *data, void *private_data)
 
 static int
 fuse_nfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-		 off_t offset, struct fuse_file_info *fi)
+		 off_t offset, struct fuse_file_info *fi, enum fuse_readdir_flags flags)
 {
 	struct nfsdir *nfsdir;
 	struct nfsdirent *nfsdirent;
@@ -298,7 +297,7 @@ fuse_nfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 	nfsdir = cb_data.return_data;
 	while ((nfsdirent = nfs_readdir(nfs, nfsdir)) != NULL) {
-		filler(buf, nfsdirent->name, NULL, 0);
+		filler(buf, nfsdirent->name, NULL, 0, 0);
 	}
 
 	nfs_closedir(nfs, nfsdir);
@@ -628,7 +627,7 @@ static int fuse_nfs_symlink(const char *from, const char *to)
 	return cb_data.status;
 }
 
-static int fuse_nfs_rename(const char *from, const char *to)
+static int fuse_nfs_rename(const char *from, const char *to, unsigned int flags)
 {
 	struct sync_cb_data cb_data;
 	int ret;
@@ -672,7 +671,7 @@ fuse_nfs_link(const char *from, const char *to)
 }
 
 static int
-fuse_nfs_chmod(const char *path, mode_t mode)
+fuse_nfs_chmod(const char *path, mode_t mode, struct fuse_file_info* file_info)
 {
 	struct sync_cb_data cb_data;
 	int ret;
@@ -693,7 +692,7 @@ fuse_nfs_chmod(const char *path, mode_t mode)
 	return cb_data.status;
 }
 
-static int fuse_nfs_chown(const char *path, uid_t uid, gid_t gid)
+static int fuse_nfs_chown(const char *path, uid_t uid, gid_t gid, struct fuse_file_info* file_info)
 {
 	struct sync_cb_data cb_data;
 	int ret;
@@ -716,7 +715,7 @@ static int fuse_nfs_chown(const char *path, uid_t uid, gid_t gid)
 	return cb_data.status;
 }
 
-static int fuse_nfs_truncate(const char *path, off_t size)
+static int fuse_nfs_truncate(const char *path, off_t size, struct fuse_file_info* file_info)
 {
 	struct sync_cb_data cb_data;
 	int ret;
@@ -817,22 +816,21 @@ static struct fuse_operations nfs_oper = {
 	.create		= fuse_nfs_create,
 	.fsync		= fuse_nfs_fsync,
 	.getattr	= fuse_nfs_getattr,
-	.link		= fuse_nfs_link,
+	.link		  = fuse_nfs_link,
 	.mkdir		= fuse_nfs_mkdir,
 	.mknod		= fuse_nfs_mknod,
-	.open		= fuse_nfs_open,
-	.read		= fuse_nfs_read,
+	.open		  = fuse_nfs_open,
+	.read		  = fuse_nfs_read,
 	.readdir	= fuse_nfs_readdir,
 	.readlink	= fuse_nfs_readlink,
 	.release	= fuse_nfs_release,
 	.rmdir		= fuse_nfs_rmdir,
 	.unlink		= fuse_nfs_unlink,
-	.utime		= fuse_nfs_utime,
 	.rename		= fuse_nfs_rename,
 	.symlink	= fuse_nfs_symlink,
 	.truncate	= fuse_nfs_truncate,
 	.write		= fuse_nfs_write,
-        .statfs 	= fuse_nfs_statfs,
+  .statfs 	= fuse_nfs_statfs,
 };
 
 void print_usage(char *name)
@@ -1156,7 +1154,7 @@ int main(int argc, char *argv[])
 	if (fusenfs_allow_other_own_ids)
 	{
 		int i = 0, allow_other_set=0;
-		for(i ; i < fuse_nfs_argc; ++i)
+		for(; i < fuse_nfs_argc; ++i)
 		{
 			if(!strcmp(fuse_nfs_argv[i], "-oallow_other"))
 			{
@@ -1205,8 +1203,8 @@ int main(int argc, char *argv[])
 		goto finished;
 	}
 
-	if (idstr = strstr(url, "uid=")) { custom_uid = atoi(&idstr[4]); }
-	if (idstr = strstr(url, "gid=")) { custom_gid = atoi(&idstr[4]); }
+	if ((idstr = strstr(url, "uid="))) { custom_uid = atoi(&idstr[4]); }
+	if ((idstr = strstr(url, "gid="))) { custom_gid = atoi(&idstr[4]); }
 
 	#ifdef WIN32
 	WSADATA wsaData;
