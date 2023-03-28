@@ -70,6 +70,7 @@ int custom_gid = -1;
 
 uid_t mount_user_uid;
 gid_t mount_user_gid;
+struct fuse_conn_info_opts *user_conn_opts = NULL;
 
 int fusenfs_allow_other_own_ids=0;
 int fuse_default_permissions=1;
@@ -386,6 +387,13 @@ fuse_nfs_open(const char *path, struct fuse_file_info *fi)
 	return cb_data.status;
 }
 
+static void *fuse_nfs_init(struct fuse_conn_info *conn, 
+	struct fuse_config *config)
+{
+	fuse_apply_conn_info_opts(user_conn_opts, conn);
+	return NULL;
+} 
+
 static int fuse_nfs_release(const char *path, struct fuse_file_info *fi)
 {
 	struct sync_cb_data cb_data;
@@ -464,7 +472,8 @@ static int fuse_nfs_write(const char *path, const char *buf, size_t size,
 	return cb_data.status;
 }
 
-static int fuse_nfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+static int fuse_nfs_create(const char *path, mode_t mode, 
+	struct fuse_file_info *fi)
 {
 	struct sync_cb_data cb_data;
 	int ret = 0;
@@ -669,7 +678,8 @@ fuse_nfs_chmod(const char *path, mode_t mode, struct fuse_file_info* file_info)
 	return cb_data.status;
 }
 
-static int fuse_nfs_chown(const char *path, uid_t uid, gid_t gid, struct fuse_file_info* file_info)
+static int fuse_nfs_chown(const char *path, uid_t uid, gid_t gid, 
+	struct fuse_file_info* file_info)
 {
 	struct sync_cb_data cb_data;
 	int ret;
@@ -692,7 +702,8 @@ static int fuse_nfs_chown(const char *path, uid_t uid, gid_t gid, struct fuse_fi
 	return cb_data.status;
 }
 
-static int fuse_nfs_truncate(const char *path, off_t size, struct fuse_file_info* file_info)
+static int fuse_nfs_truncate(const char *path, off_t size, 
+	struct fuse_file_info* file_info)
 {
 	struct sync_cb_data cb_data;
 	int ret;
@@ -788,16 +799,17 @@ fuse_nfs_statfs(const char *path, struct statvfs* stbuf)
 }
 
 static struct fuse_operations nfs_oper = {
+	.init       = fuse_nfs_init,
 	.chmod		= fuse_nfs_chmod,
 	.chown		= fuse_nfs_chown,
 	.create		= fuse_nfs_create,
 	.fsync		= fuse_nfs_fsync,
 	.getattr	= fuse_nfs_getattr,
-	.link		  = fuse_nfs_link,
+	.link		= fuse_nfs_link,
 	.mkdir		= fuse_nfs_mkdir,
 	.mknod		= fuse_nfs_mknod,
-	.open		  = fuse_nfs_open,
-	.read		  = fuse_nfs_read,
+	.open	    = fuse_nfs_open,
+	.read		= fuse_nfs_read,
 	.readdir	= fuse_nfs_readdir,
 	.readlink	= fuse_nfs_readlink,
 	.release	= fuse_nfs_release,
@@ -807,7 +819,7 @@ static struct fuse_operations nfs_oper = {
 	.symlink	= fuse_nfs_symlink,
 	.truncate	= fuse_nfs_truncate,
 	.write		= fuse_nfs_write,
-  .statfs 	= fuse_nfs_statfs,
+    .statfs 	= fuse_nfs_statfs,
 };
 
 void print_usage(char *name)
@@ -1194,12 +1206,17 @@ int main(int argc, char *argv[])
 		goto finished;
 	}
 
+	// Run the server in the foreground with -d.
+	fuse_nfs_argv[fuse_nfs_argc++] = "-d";
 	fuse_nfs_argv[1] = mnt;
 
 	LOG("Starting fuse_main()\n");
-	ret = fuse_main(fuse_nfs_argc, fuse_nfs_argv, &nfs_oper, NULL);
+	struct fuse_args args = FUSE_ARGS_INIT(fuse_nfs_argc, fuse_nfs_argv);
+	user_conn_opts = fuse_parse_conn_info_opts(&args);	
+	ret = fuse_main(args.argc, args.argv, &nfs_oper, NULL);
 
 finished:
+	fuse_opt_free_args(&args);
 	nfs_destroy_url(urls);
 	if (nfs != NULL) {
 		nfs_destroy_context(nfs);
